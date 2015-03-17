@@ -1,11 +1,19 @@
 #include "filters.h"
 
-short hilbert45[HILBERT_COEFFS] = {
-#include "hilbert_45.h" 
+short RX_hilbert45[HILBERT_COEFFS] = {
+#include "RX_hilbert_45.h" 
 };
 
-short hilbertm45[HILBERT_COEFFS] = {
-#include "hilbert_m45.h" 
+short RX_hilbertm45[HILBERT_COEFFS] = {
+#include "RX_hilbert_m45.h" 
+};
+
+short TX_hilbert45[HILBERT_COEFFS] = {
+#include "TX_hilbert_45.h" 
+};
+
+short TX_hilbertm45[HILBERT_COEFFS] = {
+#include "TX_hilbert_m45.h" 
 };
 
 short firbpf_usb[BPF_COEFFS] = {

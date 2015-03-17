@@ -1,7 +1,9 @@
 // Number of coefficients
 #define HILBERT_COEFFS 100
-extern short hilbert45[];
-extern short hilbertm45[];
+extern short RX_hilbert45[];
+extern short RX_hilbertm45[];
+extern short TX_hilbert45[];
+extern short TX_hilbertm45[];
 
 #define BPF_COEFFS 100
 extern short firbpf_usb[];
