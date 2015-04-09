@@ -27,8 +27,35 @@ void setup_display(void) {
 }
 
 // draw the spectrum display
+// this version draws 1/10 of the spectrum per call but we run it 10x the speed
+// this allows other stuff to run without blocking for so long
 
 void show_spectrum(void) {
+  static int startx=0, endx;
+  endx=startx+16;
+  int scale=1;
+//digitalWrite(DEBUG_PIN,1); // for timing measurements
+  
+  for (int16_t x=startx; x < endx; x+=2) 
+  {
+    int bar=abs(myFFT.output[x*8/10])/scale;
+    if (bar >60) bar=60;
+    if(x!=80)
+    {
+       tft.drawFastVLine(x, 60-bar,bar, GREEN);
+       tft.drawFastVLine(x, 0, 60-bar, BLACK);    
+    }
+  }
+  startx+=16;
+  if(startx >=160) startx=0;
+//digitalWrite(DEBUG_PIN,0); // 
+}
+
+/* old draw routine
+// draw the spectrum display
+
+void show_spectrum(void) {
+
   int scale=1;
   for (int16_t x=0; x < 160; x+=2) 
   {
@@ -41,6 +68,7 @@ void show_spectrum(void) {
     }
   }
 }
+*/
 
 void show_waterfall(void) {
   // experimental waterfall display for CW -

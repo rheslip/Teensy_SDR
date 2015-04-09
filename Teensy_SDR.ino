@@ -56,6 +56,7 @@ extern void show_band(String bandname);  // show band
 extern void show_frequency(long freq);  // show frequency
 
 //#define  DEBUG
+#define DEBUG_TIMING  // for timing execution - monitor HW pin
 
 // SW configuration defines
 // don't use more than one AGC!
@@ -124,7 +125,10 @@ const int8_t ModeSW =21;    // USB/LSB
 const int8_t BandSW =20;    // band selector
 const int8_t TuneSW =6;    // low for fast tune - encoder pushbutton
 
-// unused pins 4,5 
+// see define above - pin 4 used for SW execution timing & debugging
+#ifdef  DEBUG_TIMING
+#define DEBUG_PIN   4
+#endif
 const int8_t PTTSW = 10;    // also used as SDCS on the audio card - can't use an SD card!
 const int8_t PTTout = 5;    // PTT signal to softrock
 
@@ -142,7 +146,9 @@ Si5351 si5351;
 Metro five_sec=Metro(5000); // Set up a 5 second Metro
 Metro ms_100 = Metro(100);  // Set up a 100ms Metro
 Metro ms_50 = Metro(50);  // Set up a 50ms Metro for polling switches
-Metro lcd_upd =Metro(100);  // Set up a Metro for LCD updates
+Metro lcd_upd =Metro(10);  // Set up a Metro for LCD updates
+Metro CW_sample =Metro(10);  // Set up a Metro for LCD updates
+
 #ifdef CW_WATERFALL
 Metro waterfall_upd =Metro(25);  // Set up a Metro for waterfall updates
 #endif
@@ -264,7 +270,11 @@ void setup()
   digitalWrite(PTTout,0); // turn off TX mode
   PTT_in.attach(PTTSW);    // PPT switch debouncer
   PTT_in.interval(5);  // 5ms
- 
+  
+#ifdef  DEBUG_TIMING
+  pinMode(DEBUG_PIN, OUTPUT);  // for execution time monitoring with a scope
+#endif
+  
   // Audio connections require memory to work.  For more
   // detailed information, see the MemoryAndCpuUsage example
   AudioMemory(16);
@@ -410,8 +420,15 @@ void loop()
   //
   // Draw Spectrum Display
   //
-  if ((lcd_upd.check() == 1) && myFFT.available()) show_spectrum();
+//  if ((lcd_upd.check() == 1) && myFFT.available()) show_spectrum();
+  if ((lcd_upd.check() == 1)) show_spectrum();
 
+  if ((CW_sample.check() == 1)) {
+    digitalWrite(DEBUG_PIN,1); // for timing measurements
+    delay(1);
+    digitalWrite(DEBUG_PIN,0); // 
+  }
+  
 #ifdef CW_WATERFALL
   if ((waterfall_upd.check() == 1) && myFFT.available()) show_waterfall();
 #endif
