@@ -22,6 +22,7 @@ Jan 2015 - first public release, RX only
 March 2015 - CW and SSB TX mode added, band swiching added, general cleanup of the code
 April 9 2015 - added the driver for the Banggood 1.8" display and a slightly modded SI5351 library for the Teensy which has no eeprom
 	- move these to your Arduino/libraries folder
+April 13 2015 - added wiring diagram
 
 NOTE: code compiles OK with Arduino 1.61 and Teensyduino 1.21 BUT sometimes image is not suppressed as evidenced
 by signals moving both ways when you tune. Seems that if you recompile and reload once or twice its fine until
