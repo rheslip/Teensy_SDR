@@ -23,6 +23,8 @@ March 2015 - CW and SSB TX mode added, band swiching added, general cleanup of t
 April 9 2015 - added the driver for the Banggood 1.8" display and a slightly modded SI5351 library for the Teensy which has no eeprom
 	- move these to your Arduino/libraries folder
 April 13 2015 - added wiring diagram
+Sept 19 2015 - merged Softrock Ensemble support and SI570 from GMTII 
+	- I don't have an Ensemble so I can't test these patches 
 
 NOTE: code compiles OK with Arduino 1.61 and Teensyduino 1.21 BUT sometimes image is not suppressed as evidenced
 by signals moving both ways when you tune. Seems that if you recompile and reload once or twice its fine until
