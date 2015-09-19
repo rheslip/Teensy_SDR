@@ -37,7 +37,6 @@
 #include <Wire.h>
 #include <SD.h>
 #include <Encoder.h>
-#include <si5351.h>
 #include <Bounce2.h>
 #include <Adafruit_GFX.h>   // LCD Core graphics library
 //#include <Adafruit_QDTech.h>// 1.8" TFT Module using Samsung S6D02A1 chip
@@ -45,6 +44,23 @@
 #include <SPI.h>
 #include "filters.h"
 #include "display.h"
+#include <SerialFlash.h>
+
+
+#define SI570					// Uncomment for SoftRock RX Ensemble II/III Receiver Kit support
+//#define SI5351
+
+#ifdef SI570				
+
+#include "Si570.h"
+#define SI570_I2C_ADDRESS 0x55
+#define SEL0_PIN 4
+#define SEL1_PIN 8
+#endif
+
+#ifdef SI5351
+#include <si5351.h>
+#endif
 
 extern void agc(void);      // RX agc function
 extern void setup_display(void);
@@ -64,7 +80,7 @@ extern void show_frequency(long freq);  // show frequency
 // codec hardware AGC works but it looks at the entire input bandwidth 
 // ie codec HW AGC works on the strongest signal, not necessarily what you are listening to
 // it should work well for ALC (mic input) though
-#define HW_AGC // define for codec AGC 
+//#define HW_AGC // define for codec AGC 
 //#define CW_WATERFALL // define for experimental CW waterfall - needs faster update rate
 #define AUDIO_STATS    // shows audio library CPU utilization etc on serial console
 
@@ -125,6 +141,11 @@ const int8_t ModeSW =21;    // USB/LSB
 const int8_t BandSW =20;    // band selector
 const int8_t TuneSW =6;    // low for fast tune - encoder pushbutton
 
+// SEL0 and SEL1 control lines for the Softrock RX ABPF
+
+const int8_t SEL0 = SEL0_PIN;   // - SEL0 - Teensy pin SEL0_PIN -> ATTiny85 pin 3
+const int8_t SEL1 = SEL1_PIN;   // - SEL1 - Teensy pin SEL1_PIN -> ATTiny85 pin 1
+
 // see define above - pin 4 used for SW execution timing & debugging
 #ifdef  DEBUG_TIMING
 #define DEBUG_PIN   4
@@ -138,8 +159,18 @@ Bounce  PTT_in = Bounce();   // debouncer
 #define IF_FREQ 11000       // IF Oscillator frequency
 #define CW_FREQ 700        // audio tone frequency used for CW
 
-// clock generator
+// clock generator SI5351
+
+#ifdef SI5351
 Si5351 si5351;
+#endif
+
+// clock generator SI570
+
+#ifdef SI570
+Si570 *vfo;
+#endif
+
 #define MASTER_CLK_MULT  4  // softrock requires 4x clock
 
 // various timers
@@ -271,6 +302,16 @@ void setup()
   PTT_in.attach(PTTSW);    // PPT switch debouncer
   PTT_in.interval(5);  // 5ms
   
+  
+#ifdef SI570
+  pinMode(SEL1_PIN, OUTPUT); 	// set SEL1_PIN and SEL1_PIN as ouputs
+  pinMode(SEL0_PIN, OUTPUT);
+  
+  digitalWrite(SEL0_PIN, HIGH); // selects filter for default 40M band
+  digitalWrite(SEL1_PIN, LOW);
+#endif
+
+  
 #ifdef  DEBUG_TIMING
   pinMode(DEBUG_PIN, OUTPUT);  // for execution time monitoring with a scope
 #endif
@@ -322,13 +363,33 @@ void setup()
 // set up initial band and frequency
   show_band(bands[STARTUP_BAND].name);
   
+#ifdef SI570
+
+  vfo = new Si570(SI570_I2C_ADDRESS, 56320000);
+
+  if (vfo->status == SI570_ERROR) {
+    // The Si570 is unreachable. Show an error for 3 seconds and continue.
+    Serial.print("I2C Si570 error.");
+    delay(10000);
+  }
+
+  vfo->setFrequency((unsigned long)bands[STARTUP_BAND].freq * MASTER_CLK_MULT);
+
+  delay(3);
+
+#endif
+
+
+#ifdef SI5351
+
   // set up clk gen
   si5351.init(SI5351_CRYSTAL_LOAD_8PF);
   si5351.set_correction(-100);  // I did a by ear correction to WWV
   // Set CLK0 to output 14 MHz with a fixed PLL frequency
   si5351.set_pll(SI5351_PLL_FIXED, SI5351_PLLA);
-  si5351.set_freq((unsigned long)bands[STARTUP_BAND].freq*MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
-  delay(3);
+  si5351.set_freq((unsigned long)bands[STARTUP_BAND].freq * MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+
+#endif
   
   setup_RX(SSB_USB);  // set up the audio chain for USB reception
 
@@ -353,7 +414,15 @@ void loop()
     // press encoder button for fast tuning
     if (digitalRead(TuneSW)) bands[band].freq+=encoder_change*TUNE_STEP;  // tune the master vfo - normal steps
     else bands[band].freq +=encoder_change*FAST_TUNE_STEP;  // fast tuning steps
-    si5351.set_freq((unsigned long)bands[band].freq*MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+
+#ifdef SI5351
+    si5351.set_freq((unsigned long)bands[band].freq * MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#endif
+
+#ifdef SI570
+    vfo->setFrequency((unsigned long)bands[band].freq * MASTER_CLK_MULT);
+	setband(bands[band].freq + IF_FREQ);         // check if we need to change the filter
+#endif
     show_frequency(bands[band].freq + IF_FREQ);  // frequency we are listening to
   }
 
@@ -376,7 +445,16 @@ void loop()
        if (Bandsw_state==0) { // switch was pressed - falling edge
          if(++band > LAST_BAND) band=FIRST_BAND; // cycle thru radio bands 
          show_band(bands[band].name); // show new band
-         si5351.set_freq((unsigned long)bands[band].freq*MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0); // change frequency
+		 
+#ifdef SI5351
+			si5351.set_freq((unsigned long)bands[band].freq * MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#endif
+
+#ifdef SI570
+			vfo->setFrequency((unsigned long)bands[band].freq * MASTER_CLK_MULT);
+			setband(bands[band].freq + IF_FREQ);         // check if we need to change the filter
+#endif
+
          show_frequency(bands[band].freq + IF_FREQ);  // frequency we are listening to
          Bandsw_state=1; // flag switch is pressed
        }
@@ -399,7 +477,9 @@ void loop()
      tft.print("TX"); 
      setup_TX(mode);  // set up the audio chain for transmit mode
      // in TX mode we don't use an IF so we have to shift the TX frequency up by the IF frequency
-     si5351.set_freq((unsigned long)(bands[band].freq+IF_FREQ)*MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#ifdef SI5351
+        si5351.set_freq((unsigned long)bands[band].freq * MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#endif
      delay(2); // short delay to allow things to settle
      digitalWrite(PTTout,1); // transmitter on
      while( !PTT_in.read()) { // wait for PTT release
@@ -408,7 +488,9 @@ void loop()
      }
      digitalWrite(PTTout,0); // transmitter off
      // restore the master clock to the RX frequency
-     si5351.set_freq((unsigned long)bands[band].freq*MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#ifdef SI5351
+        si5351.set_freq((unsigned long)bands[band].freq * MASTER_CLK_MULT, SI5351_PLL_FIXED, SI5351_CLK0);
+#endif
      setup_RX(mode);  // set up the audio chain for RX mode
      tft.fillRect(75, 72, 11, 10, BLACK);// erase text
   }
@@ -561,3 +643,31 @@ void setup_TX(int mode)
   AudioInterrupts(); 
 }
 
+#ifdef SI570
+
+void setband(unsigned long freq)
+{
+  if ( freq >= 1000000 && freq < 4000000)
+  {
+    digitalWrite(SEL0, LOW);
+    digitalWrite(SEL1, LOW);
+  }
+  if ( freq >= 4000000 && freq < 7000000)
+  {
+    digitalWrite(SEL0, LOW);
+    digitalWrite(SEL1, HIGH);
+  }
+  if ( freq >= 7000000 && freq < 16000000)
+  {
+    digitalWrite(SEL0, HIGH);
+    digitalWrite(SEL1, LOW);
+  }
+  if ( freq >= 16000000 && freq < 30000000)
+  {
+    digitalWrite(SEL0, HIGH);
+    digitalWrite(SEL1, HIGH);
+  }
+}
+
+
+#endif
